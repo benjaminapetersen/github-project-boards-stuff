@@ -8,6 +8,9 @@
 *.so
 *.dylib
 
+# Built binary
+github-board-automation
+
 # Test binary, built with `go test -c`
 *.test
 
