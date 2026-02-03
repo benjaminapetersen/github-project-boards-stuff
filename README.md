@@ -13,7 +13,7 @@ Automation script to find all your commits, PRs, and issues from the last month 
 
 ## Prerequisites
 
-- Go 1.21 or later
+- Go 1.24 or later
 - GitHub Personal Access Token with appropriate permissions:
   - `repo` - Full control of private repositories
   - `read:org` - Read org and team membership
