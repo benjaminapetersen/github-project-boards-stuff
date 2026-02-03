@@ -276,10 +276,10 @@ func extractRepoFromURL(url string) string {
 	}
 
 	// Parse URL to extract owner/repo
-	// Expected format: https://github.com/owner/repo/...
+	// Expected format after removing protocol: github.com/owner/repo/...
 	parts := splitURL(url)
-	if len(parts) >= 5 && parts[2] == "github.com" {
-		return parts[3] + "/" + parts[4]
+	if len(parts) >= 3 && parts[0] == "github.com" {
+		return parts[1] + "/" + parts[2]
 	}
 
 	return ""
@@ -324,7 +324,15 @@ func addItemsToProject(ctx context.Context, client *github.Client, projectID str
 	log.Printf("\nCommits (%d):", len(commits))
 	for i, commit := range commits {
 		if i < 5 { // Show first 5
-			log.Printf("  - %s: %s (%s)", commit.Repo, commit.SHA[:7], commit.Message[:min(50, len(commit.Message))])
+			sha := commit.SHA
+			if len(sha) > 7 {
+				sha = sha[:7]
+			}
+			msg := commit.Message
+			if len(msg) > 50 {
+				msg = msg[:50]
+			}
+			log.Printf("  - %s: %s (%s)", commit.Repo, sha, msg)
 		}
 	}
 	if len(commits) > 5 {
@@ -365,11 +373,4 @@ func addItemsToProject(ctx context.Context, client *github.Client, projectID str
 	// }
 
 	return nil
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
