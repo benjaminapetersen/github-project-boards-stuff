@@ -34,9 +34,11 @@ Set the following environment variables:
 
 ```bash
 export GITHUB_TOKEN="your_github_token"
-export GITHUB_USERNAME="your_github_username"
+export GITHUB_USERNAMES="user1,user2,user3"  # Comma-separated list of GitHub usernames
 export PROJECT_ID="your_project_id" # Optional - only needed if adding to project board
 ```
+
+Note: `GITHUB_USERNAME` (singular) is also supported for backward compatibility.
 
 ### Running the Script
 
@@ -52,15 +54,24 @@ go run main.go
 
 ```
 2024/01/01 12:00:00 Starting GitHub Project Board automation for Kubernetes organization...
-2024/01/01 12:00:00 Looking for activity from user: yourusername
+2024/01/01 12:00:00 Looking for activity from users: enj, amarase
 2024/01/01 12:00:00 Date range: 2023-12-01 to 2024-01-01
-2024/01/01 12:00:05 Found 15 commits
-2024/01/01 12:00:08 Found 3 PRs
-2024/01/01 12:00:10 Found 2 issues
+2024/01/01 12:00:01
+2024/01/01 12:00:01 Searching for user: enj
+2024/01/01 12:00:05 Found 10 commits for enj
+2024/01/01 12:00:08 Found 3 PRs for enj
+2024/01/01 12:00:10 Found 1 issues for enj
+2024/01/01 12:00:10
+2024/01/01 12:00:10 Searching for user: amarase
+2024/01/01 12:00:14 Found 5 commits for amarase
+2024/01/01 12:00:16 Found 2 PRs for amarase
+2024/01/01 12:00:18 Found 1 issues for amarase
+2024/01/01 12:00:18
+2024/01/01 12:00:18 Total: 15 commits, 5 PRs, 2 issues
 
 Summary:
 - Commits: 15
-- Pull Requests: 3
+- Pull Requests: 5
 - Issues: 2
 ```
 

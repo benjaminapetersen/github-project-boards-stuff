@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/google/go-github/v57/github"
@@ -18,7 +19,7 @@ const (
 type Config struct {
 	GitHubToken string
 	ProjectID   string
-	Username    string
+	Usernames   []string
 }
 
 func main() {
@@ -28,7 +29,7 @@ func main() {
 	client := createGitHubClient(ctx, config.GitHubToken)
 
 	log.Printf("Starting GitHub Project Board automation for Kubernetes organization...")
-	log.Printf("Looking for activity from user: %s", config.Username)
+	log.Printf("Looking for activity from users: %s", strings.Join(config.Usernames, ", "))
 
 	// Calculate date range (last month)
 	endDate := time.Now()
@@ -36,32 +37,49 @@ func main() {
 
 	log.Printf("Date range: %s to %s", startDate.Format("2006-01-02"), endDate.Format("2006-01-02"))
 
-	// Find commits, PRs, and issues
-	commits, err := findUserCommits(ctx, client, config.Username, startDate, endDate)
-	if err != nil {
-		log.Printf("Error finding commits: %v", err)
-	} else {
-		log.Printf("Found %d commits", len(commits))
+	// Find commits, PRs, and issues for all users
+	var allCommits []CommitInfo
+	var allPRs []PRInfo
+	var allIssues []IssueInfo
+
+	for _, username := range config.Usernames {
+		log.Printf("\nSearching for user: %s", username)
+
+		commits, err := findUserCommits(ctx, client, username, startDate, endDate)
+		if err != nil {
+			log.Printf("Error finding commits for %s: %v", username, err)
+		} else {
+			log.Printf("Found %d commits for %s", len(commits), username)
+			allCommits = append(allCommits, commits...)
+		}
+
+		prs, err := findUserPRs(ctx, client, username, startDate, endDate)
+		if err != nil {
+			log.Printf("Error finding PRs for %s: %v", username, err)
+		} else {
+			log.Printf("Found %d PRs for %s", len(prs), username)
+			allPRs = append(allPRs, prs...)
+		}
+
+		issues, err := findUserIssues(ctx, client, username, startDate, endDate)
+		if err != nil {
+			log.Printf("Error finding issues for %s: %v", username, err)
+		} else {
+			log.Printf("Found %d issues for %s", len(issues), username)
+			allIssues = append(allIssues, issues...)
+		}
 	}
 
-	prs, err := findUserPRs(ctx, client, config.Username, startDate, endDate)
-	if err != nil {
-		log.Printf("Error finding PRs: %v", err)
-	} else {
-		log.Printf("Found %d PRs", len(prs))
-	}
+	commits := allCommits
+	prs := allPRs
+	issues := allIssues
 
-	issues, err := findUserIssues(ctx, client, config.Username, startDate, endDate)
-	if err != nil {
-		log.Printf("Error finding issues: %v", err)
-	} else {
-		log.Printf("Found %d issues", len(issues))
-	}
+	log.Printf("\nTotal: %d commits, %d PRs, %d issues", len(commits), len(prs), len(issues))
 
 	// Add items to project board
 	if config.ProjectID != "" {
 		log.Printf("Adding items to project board (ID: %s)...", config.ProjectID)
-		err = addItemsToProject(ctx, client, config.ProjectID, commits, prs, issues)
+		err := addItemsToProject(ctx, client, config.ProjectID, commits, prs, issues)
 		if err != nil {
 			log.Fatalf("Error adding items to project: %v", err)
 		}
@@ -81,9 +99,26 @@ func loadConfig() Config {
 		log.Fatal("GITHUB_TOKEN environment variable is required")
 	}
 
-	username := os.Getenv("GITHUB_USERNAME")
-	if username == "" {
-		log.Fatal("GITHUB_USERNAME environment variable is required")
+	usernamesStr := os.Getenv("GITHUB_USERNAMES")
+	if usernamesStr == "" {
+		// Fall back to GITHUB_USERNAME for backward compatibility
+		usernamesStr = os.Getenv("GITHUB_USERNAME")
+	}
+	if usernamesStr == "" {
+		log.Fatal("GITHUB_USERNAMES (or GITHUB_USERNAME) environment variable is required")
+	}
+
+	// Parse comma-separated usernames and trim whitespace
+	var usernames []string
+	for _, u := range strings.Split(usernamesStr, ",") {
+		u = strings.TrimSpace(u)
+		if u != "" {
+			usernames = append(usernames, u)
+		}
+	}
+
+	if len(usernames) == 0 {
+		log.Fatal("At least one username is required")
 	}
 
 	projectID := os.Getenv("PROJECT_ID")
@@ -91,7 +126,7 @@ func loadConfig() Config {
 	return Config{
 		GitHubToken: token,
 		ProjectID:   projectID,
-		Username:    username,
+		Usernames:   usernames,
 	}
 }
 
