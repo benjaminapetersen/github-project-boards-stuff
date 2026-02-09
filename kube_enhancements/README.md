@@ -5,8 +5,13 @@ issues by label and milestone, and optionally creates/updates a GitHub Projects 
 
 ## Board
 
-- Example link:
-  - https://github.com/kubernetes/enhancements/issues?q=is%3Aissue%20state%3Aopen%20label%3Asig%2Fauth
+- [Enhancements Repo sig/auth filter issues](https://github.com/kubernetes/enhancements/issues?q=is%3Aissue%20state%3Aopen%20label%3Asig%2Fauth)
+- [1.36 Enhancements Tracking](https://github.com/orgs/kubernetes/projects/241/views/1?filterQuery=-status%3ADeferred%2C%22Removed+from+Milestone%22+label%3Asig%2Fauth)
+  - Kubernetes Project 241
+- [SIG-Auth Triage Kanban](https://github.com/orgs/kubernetes/projects/116/views/1)
+- [Kube Projects List](https://github.com/orgs/kubernetes/projects)
+- [Ben's cross-sig efforts](https://github.com/orgs/kubernetes/projects/230)
+- [Upstream Auth Sprint Tracking](https://github.com/orgs/Azure/projects/498/views/4)
 
 ## Setup
 
