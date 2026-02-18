@@ -101,30 +101,37 @@ cp .env/kube-board.env.example .env/kube-board.env
 # 2. Source the env
 # The .env file contains a number of variables relevant to the following commands.
 source .env/kube-board.env
+```
 
-# 3. Dry-run (no API calls — just shows config + estimated cost)
-go run ./cmd/kube-board sync-enhancement-board
+Build and run the binary:
 
-# 4. Sync enhancements: fetch from source board, write configured fields to dest board
-go run ./cmd/kube-board sync-enhancement-board --use-cache=false --output=board
+```bash
+# 3. Build
+make build
 
-# 5. Use cached data (faster iteration)
-go run ./cmd/kube-board sync-enhancement-board --use-cache=true
+# 4. Dry-run (no API calls — just shows config + estimated cost)
+./bin/kube-board sync-enhancement-board
 
-# 6. Org search only (issues/PRs by team members across orgs)
-go run ./cmd/kube-board sync-org-items --use-cache=false
+# 5. Sync enhancements: fetch from source board, write configured fields to dest board
+./bin/kube-board sync-enhancement-board --use-cache=false --output=board
 
-# 7. Org search, write to board
-go run ./cmd/kube-board sync-org-items --use-cache=false --output=board
+# 6. Use cached data (faster iteration)
+./bin/kube-board sync-enhancement-board --use-cache=true
 
-# 8. Full sync: fetch both phases + write to private board
-go run ./cmd/kube-board sync --use-cache=false --output=board --sync
+# 7. Org search only (issues/PRs by team members across orgs)
+./bin/kube-board sync-org-items --use-cache=false
 
-# 9. Write markdown report (uses cached data)
-go run ./cmd/kube-board sync --use-cache=true --output=markdown
+# 8. Org search, write to board
+./bin/kube-board sync-org-items --use-cache=false --output=board
 
-# 10. Markdown report to custom file
-go run ./cmd/kube-board sync --use-cache=true --output=markdown --markdown-file=report.md
+# 9. Full sync: fetch both phases + write to private board
+./bin/kube-board sync --use-cache=false --output=board --sync
+
+# 10. Write markdown report (uses cached data)
+./bin/kube-board sync --use-cache=true --output=markdown
+
+# 11. Markdown report to custom file
+./bin/kube-board sync --use-cache=true --output=markdown --markdown-file=report.md
 ```
 
 ## Expected CLI Output
