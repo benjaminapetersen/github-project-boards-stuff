@@ -1,7 +1,11 @@
-.PHONY: all build clean clean-cache kube-board tidy vet fmt test help
+.PHONY: all build clean clean-cache kube-board tidy vet fmt test help image kind-load deploy helm-lint helm-template helm-install helm-upgrade helm-uninstall
 
 BINDIR := bin
 CACHEDIR := .cache
+IMAGE := kube-board:latest
+CHART := deploy/chart/kube-board
+RELEASE := kube-board
+NAMESPACE := kube-board
 
 all: build
 
@@ -34,3 +38,28 @@ fmt: ## Run go fmt on all packages
 
 test: ## Run all tests
 	go test ./...
+
+image: ## Build container image (docker build)
+	docker build -t $(IMAGE) .
+
+kind-load: image ## Build image and load into Kind cluster
+	kind load docker-image $(IMAGE)
+
+deploy: ## Apply plain Kubernetes manifests from deploy/
+	kubectl apply -f deploy/namespace.yaml
+	kubectl apply -f deploy/
+
+helm-lint: ## Lint the Helm chart
+	helm lint $(CHART)
+
+helm-template: ## Render chart templates locally (dry-run)
+	helm template $(RELEASE) $(CHART)
+
+helm-install: ## Install the Helm chart into the cluster
+	helm install $(RELEASE) $(CHART) -n $(NAMESPACE) --create-namespace
+
+helm-upgrade: ## Upgrade (or install) the Helm release
+	helm upgrade --install $(RELEASE) $(CHART) -n $(NAMESPACE) --create-namespace
+
+helm-uninstall: ## Uninstall the Helm release
+	helm uninstall $(RELEASE) -n $(NAMESPACE)

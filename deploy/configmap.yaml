@@ -1,0 +1,36 @@
+# Non-secret configuration for kube-board.
+# Edit these values to match your team and board setup.
+# See the top-level README for full documentation of each variable.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kube-board-config
+  namespace: kube-board
+data:
+  # --- Team scoping ---
+  GITHUB_USERNAMES: ""  # REQUIRED — comma-separated GitHub handles
+
+  # --- Enhancements phase ---
+  ENHANCEMENTS_REPO: "kubernetes/enhancements"
+  ENHANCEMENTS_LABELS: "sig/auth"
+  GITHUB_MILESTONE: ""  # e.g., "v1.36"
+  GITHUB_KUBERNETES_RELEASE_SYNC_BOARD: "kubernetes/projects/241"
+  GITHUB_KUBERNETES_RELEASE_SYNC_BOARD_FIELDS: "TrackingStatus,Stage,PRRStatus,EnhancementType,SIG,Milestone"
+
+  # --- Issues / org-items phase ---
+  ISSUES_REPO: "kubernetes/kubernetes"
+  ISSUES_SIG_LABELS: ""  # e.g., "sig/auth"
+  ISSUES_SEARCH_QUALIFIER: "involves"
+  GITHUB_ADDITIONAL_ORGS: ""  # e.g., "kubernetes-sigs"
+  GITHUB_SEARCH_SINCE: "1m"  # 1 month look-back for additional orgs
+
+  # --- Exclusions ---
+  GITHUB_EXCLUDE_STATES: "closed"
+  GITHUB_EXCLUDE_LABELS: ""
+  GITHUB_EXCLUDE_STATUSES: ""
+
+  # --- Destination board ---
+  GITHUB_DEST_BOARD_OWNER: ""   # REQUIRED for --output=board — GitHub user or org
+  GITHUB_DEST_BOARD_NAME: ""    # REQUIRED for --output=board — board title
+  GITHUB_LINK_REPOS: ""
+  GITHUB_DEST_BOARD_ADDITIONAL_VIEWS: ""

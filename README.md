@@ -25,9 +25,12 @@ view automatically and keeps it in sync.
 │   ├── board/               Shared Projects V2 CRUD
 │   ├── cache/               Generic JSON file caching
 │   └── ratelimit/           Rate limit checking & display
+├── deploy/                  Kubernetes CronJob manifests
+│   └── chart/kube-board/    Helm chart (optional)
 ├── .env/                    Environment config examples
 ├── bin/                     Build output (gitignored)
 ├── _output/                 Markdown reports (gitignored)
+├── Dockerfile               Multi-stage container build
 ├── Makefile
 ├── go.mod                   Single module
 └── README.md
@@ -88,6 +91,7 @@ Legacy aliases `enhancements`, `issues`, and `sync-orgs` still work but print a 
 
 ## Quick Start
 
+Run the binary locally, with a `.env` file for configuration.
 
 ```bash
 # 1. Copy and fill in the env file
@@ -305,4 +309,136 @@ make build
 
 # Or directly
 make kube-board
+
+# Build the container image
+make image
+```
+
+## Deploying on Kubernetes
+
+The `deploy/` directory contains manifests to run kube-board as a CronJob.
+The default schedule syncs **4 times per day**: midnight, 6 AM, noon, and 3 PM.
+
+These instructions assume a local [Kind](https://kind.sigs.k8s.io/) cluster,
+but the manifests work on any Kubernetes cluster.
+
+### 1. Create a Kind cluster (if needed)
+
+```bash
+kind create cluster --name kube-board
+```
+
+### 2. Build and load the image
+
+```bash
+# Build the container image and load it into Kind
+make kind-load
+```
+
+For a remote cluster, push to your registry instead:
+
+```bash
+make image
+docker tag kube-board:latest ghcr.io/YOUR_USER/kube-board:latest
+docker push ghcr.io/YOUR_USER/kube-board:latest
+```
+
+Then update `deploy/cronjob.yaml` to reference the pushed image.
+
+### 3. Configure
+
+Edit `deploy/configmap.yaml` with your team members, milestone, board
+settings, etc.  At minimum set:
+
+- `GITHUB_USERNAMES` — comma-separated GitHub handles
+- `GITHUB_DEST_BOARD_OWNER` — owner of the private board
+- `GITHUB_DEST_BOARD_NAME` — title of the private board
+
+### 4. Create the secret
+
+```bash
+kubectl create namespace kube-board
+
+kubectl -n kube-board create secret generic kube-board-token \
+  --from-literal=GITHUB_TOKEN=ghp_YOUR_TOKEN_HERE
+```
+
+### 5. Deploy
+
+```bash
+make deploy
+
+# Or manually:
+kubectl apply -f deploy/
+```
+
+### 6. Verify
+
+```bash
+# Check the CronJob
+kubectl -n kube-board get cronjobs
+
+# Trigger a manual run
+kubectl -n kube-board create job --from=cronjob/kube-board-sync kube-board-manual
+
+# Watch the job
+kubectl -n kube-board get pods -w
+
+# Check logs
+kubectl -n kube-board logs job/kube-board-manual
+```
+
+### Schedule
+
+The default cron schedule is `0 0,6,12,15 * * *`:
+
+| Run       | Time    |
+|-----------|---------|
+| Midnight  | 12:00 AM |
+| Morning   | 6:00 AM  |
+| Noon      | 12:00 PM |
+| Afternoon | 3:00 PM  |
+
+Edit the `schedule` field in `deploy/cronjob.yaml` (or `values.yaml` for Helm) to adjust.
+
+### Helm Chart (optional)
+
+A Helm chart is available at `deploy/chart/kube-board/` as an alternative to
+the plain manifests. All configuration lives in a single `values.yaml`.
+
+```bash
+# Lint the chart
+make helm-lint
+
+# Preview the rendered templates
+make helm-template
+
+# Install (creates the namespace automatically)
+make helm-install
+
+# Or with custom values:
+helm install kube-board deploy/chart/kube-board \
+  -n kube-board --create-namespace \
+  --set githubToken=ghp_YOUR_TOKEN \
+  --set config.GITHUB_USERNAMES="user1,user2" \
+  --set config.GITHUB_DEST_BOARD_OWNER=myorg \
+  --set config.GITHUB_DEST_BOARD_NAME="Team Board" \
+  --set config.GITHUB_MILESTONE=v1.36
+
+# Upgrade after changing values
+make helm-upgrade
+
+# Uninstall
+make helm-uninstall
+```
+
+To use a pre-existing secret instead of letting the chart create one:
+
+```bash
+kubectl -n kube-board create secret generic my-token \
+  --from-literal=GITHUB_TOKEN=ghp_YOUR_TOKEN
+
+helm install kube-board deploy/chart/kube-board \
+  -n kube-board --create-namespace \
+  --set existingSecret=my-token
 ```

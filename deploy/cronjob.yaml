@@ -1,0 +1,52 @@
+# CronJob: runs kube-board sync 4 times daily.
+#   00:00  — midnight
+#   06:00  — morning
+#   12:00  — noon
+#   15:00  — afternoon
+#
+# Schedule: minute 0 at hours 0, 6, 12, 15 every day.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: kube-board-sync
+  namespace: kube-board
+spec:
+  schedule: "0 0,6,12,15 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 600  # 10-minute timeout
+      template:
+        metadata:
+          labels:
+            app: kube-board
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: kube-board
+              image: kube-board:latest
+              imagePullPolicy: IfNotPresent
+              args:
+                - sync
+                - --use-cache=false
+                - --output=board
+                - --sync
+              envFrom:
+                - configMapRef:
+                    name: kube-board-config
+              env:
+                - name: GITHUB_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: kube-board-token
+                      key: GITHUB_TOKEN
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 200m
+                  memory: 128Mi
