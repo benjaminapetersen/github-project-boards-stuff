@@ -8,8 +8,9 @@
 *.so
 *.dylib
 
-# Built binary
-github-board-automation
+# Built binaries
+/bin/
+kube-board
 
 # Test binary, built with `go test -c`
 *.test
@@ -27,11 +28,17 @@ profile.cov
 go.work
 go.work.sum
 
-# env file
-.env*
+# env files (actual secrets - ignore .env files but not the .env/ directory)
+*.env
+!.env/
+.env/*.env
+!.env/*.env.example
 
 # cache
 .cache
+
+# Generated output
+_output/
 
 # Editor/IDE
 # .idea/
