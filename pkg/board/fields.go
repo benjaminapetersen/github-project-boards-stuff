@@ -240,12 +240,13 @@ func GetProjectFields(gql *ghgql.Client, projectID string) (FieldMap, error) {
 	return parseFieldNodes(result.Node.Fields.Nodes), nil
 }
 
-// ---------- Ensure Private ----------
+// ---------- Ensure Visibility ----------
 
-// EnsurePrivate sets a project to not-public.
-func EnsurePrivate(gql *ghgql.Client, projectID string) error {
-	mutation := `mutation($projectId: ID!) {
-		updateProjectV2(input: {projectId: $projectId, public: false}) {
+// EnsureVisibility sets a project's public/private visibility.
+// public=true makes the board visible to anyone; public=false makes it private.
+func EnsureVisibility(gql *ghgql.Client, projectID string, public bool) error {
+	mutation := `mutation($projectId: ID!, $public: Boolean!) {
+		updateProjectV2(input: {projectId: $projectId, public: $public}) {
 			projectV2 { id public }
 		}
 	}`
@@ -253,7 +254,7 @@ func EnsurePrivate(gql *ghgql.Client, projectID string) error {
 	var result json.RawMessage
 	return gql.Do(ghgql.Request{
 		Query:     mutation,
-		Variables: map[string]any{"projectId": projectID},
+		Variables: map[string]any{"projectId": projectID, "public": public},
 	}, &result)
 }
 

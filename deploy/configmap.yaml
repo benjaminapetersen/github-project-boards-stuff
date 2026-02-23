@@ -13,7 +13,7 @@ data:
   # --- Enhancements phase ---
   ENHANCEMENTS_REPO: "kubernetes/enhancements"
   ENHANCEMENTS_LABELS: "sig/auth"
-  GITHUB_MILESTONE: ""  # e.g., "v1.36"
+  GITHUB_KUBERNETES_MILESTONE: ""  # e.g., "v1.36"
   GITHUB_KUBERNETES_RELEASE_SYNC_BOARD: "kubernetes/projects/241"
   GITHUB_KUBERNETES_RELEASE_SYNC_BOARD_FIELDS: "TrackingStatus,Stage,PRRStatus,EnhancementType,SIG,Milestone"
 
@@ -30,7 +30,8 @@ data:
   GITHUB_EXCLUDE_STATUSES: ""
 
   # --- Destination board ---
-  GITHUB_DEST_BOARD_OWNER: ""   # REQUIRED for --output=board — GitHub user or org
-  GITHUB_DEST_BOARD_NAME: ""    # REQUIRED for --output=board — board title
+  GITHUB_DEST_BOARD_OWNER: ""      # REQUIRED for --output=board — GitHub user or org
+  GITHUB_DEST_BOARD_NAME: ""       # REQUIRED for --output=board — board title
+  GITHUB_DEST_BOARD_PRIVACY: "private"  # "private" (default) or "public"
   GITHUB_LINK_REPOS: ""
   GITHUB_DEST_BOARD_ADDITIONAL_VIEWS: ""

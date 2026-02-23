@@ -272,18 +272,19 @@ for the full list with comments. Key variables:
 |----------|----------|---------|-------------|
 | `GITHUB_TOKEN` | yes | — | Classic PAT with `read:org`, `read:project`, `repo`, `project` |
 | `GITHUB_USERNAMES` | yes | — | Comma-separated team member GitHub handles |
-| `GITHUB_MILESTONE` | no | — | e.g., `v1.36` |
+| `GITHUB_KUBERNETES_MILESTONE` | no | — | e.g., `v1.36` |
 | `ENHANCEMENTS_LABELS` | no | `sig/auth` | Labels to discover KEPs |
 | `GITHUB_KUBERNETES_RELEASE_SYNC_BOARD` | no | `kubernetes/projects/241` | Source board to sync fields from (format: `org/projects/num`) |
 | `GITHUB_KUBERNETES_RELEASE_SYNC_BOARD_FIELDS` | no | — | Comma-separated field keys to sync (e.g., `TrackingStatus,Stage,PRRStatus`) |
 | `GITHUB_ADDITIONAL_ORGS` | no | — | Additional GitHub orgs to search (comma-separated) |
-| `GITHUB_SEARCH_SINCE` | no | — | Time window for additional org searches (e.g., `1m` = 1 month) |
+| `GITHUB_SEARCH_SINCE` | no | — | Time window for additional org searches (`Nd`, `Nw`, `Nm`, `Ny`; e.g., `1m` = 1 month, `1y` = 1 year). Omit for no limit. |
 | `GITHUB_KUBERNETES_ORG_LABELS` | no | — | SIG labels for narrowing primary org searches |
 | `GITHUB_EXCLUDE_STATES` | no | `closed` | States to exclude server-side |
 | `GITHUB_EXCLUDE_LABELS` | no | — | Labels to exclude server-side |
 | `GITHUB_EXCLUDE_STATUSES` | no | — | Board status values to exclude client-side |
-| `GITHUB_DEST_BOARD_OWNER` | board mode | — | Owner of the private destination board |
-| `GITHUB_DEST_BOARD_NAME` | board mode | — | Title of the private destination board |
+| `GITHUB_DEST_BOARD_OWNER` | board mode | — | Owner of the destination board |
+| `GITHUB_DEST_BOARD_NAME` | board mode | — | Title of the destination board |
+| `GITHUB_DEST_BOARD_PRIVACY` | no | `private` | Board visibility: `private` or `public` |
 | `GITHUB_LINK_REPOS` | no | — | Repos to link to the destination board |
 
 ## Shared Packages
@@ -430,7 +431,7 @@ helm install kube-board deploy/chart/kube-board \
   --set config.GITHUB_USERNAMES="user1,user2" \
   --set config.GITHUB_DEST_BOARD_OWNER=myorg \
   --set config.GITHUB_DEST_BOARD_NAME="Team Board" \
-  --set config.GITHUB_MILESTONE=v1.36
+  --set config.GITHUB_KUBERNETES_MILESTONE=v1.36
 
 # Upgrade after changing values
 make helm-upgrade
