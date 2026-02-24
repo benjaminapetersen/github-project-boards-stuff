@@ -17,6 +17,9 @@ import (
 // Endpoint is the GitHub GraphQL API URL.
 const Endpoint = "https://api.github.com/graphql"
 
+// RESTEndpoint is the GitHub REST API base URL.
+const RESTEndpoint = "https://api.github.com"
+
 // Client is an authenticated GitHub GraphQL API client.
 type Client struct {
 	HTTPClient *http.Client
@@ -96,6 +99,65 @@ func (c *Client) Do(req Request, result any) error {
 	if result != nil {
 		if err := json.Unmarshal(gqlResp.Data, result); err != nil {
 			return fmt.Errorf("unmarshal data: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// DoREST sends a REST API request to the GitHub REST API.
+// method is the HTTP method (GET, POST, PATCH, DELETE).
+// path is the URL path (e.g., "/users/{owner}/projects/{number}/views").
+// body is marshaled to JSON for the request body (nil for GET/DELETE).
+// result is unmarshaled from the JSON response (nil to ignore response body).
+func (c *Client) DoREST(method, path string, body any, result any) error {
+	var reqBody io.Reader
+	if body != nil {
+		b, err := json.Marshal(body)
+		if err != nil {
+			return fmt.Errorf("marshal REST body: %w", err)
+		}
+		reqBody = bytes.NewReader(b)
+	}
+
+	url := RESTEndpoint + path
+	httpReq, err := http.NewRequestWithContext(context.Background(), method, url, reqBody)
+	if err != nil {
+		return fmt.Errorf("create REST request: %w", err)
+	}
+	httpReq.Header.Set("Accept", "application/vnd.github+json")
+	httpReq.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	if body != nil {
+		httpReq.Header.Set("Content-Type", "application/json")
+	}
+
+	resp, err := c.HTTPClient.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("REST request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read REST response: %w", err)
+	}
+
+	if resp.StatusCode == http.StatusTooManyRequests {
+		retryAfter := resp.Header.Get("Retry-After")
+		return &RateLimitError{
+			StatusCode: resp.StatusCode,
+			RetryAfter: retryAfter,
+			Body:       string(respBody),
+		}
+	}
+
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("REST %s %s HTTP %d: %s", method, path, resp.StatusCode, string(respBody))
+	}
+
+	if result != nil && len(respBody) > 0 {
+		if err := json.Unmarshal(respBody, result); err != nil {
+			return fmt.Errorf("unmarshal REST response: %w", err)
 		}
 	}
 

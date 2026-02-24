@@ -1,9 +1,9 @@
 package board
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/benjaminapetersen/github-project-boards-stuff/pkg/ghgql"
 )
@@ -20,12 +20,12 @@ type ViewDef struct {
 // ViewConfig describes a desired view on the destination board.
 type ViewConfig struct {
 	Name       string   // View/tab name
-	FieldNames []string // Field names that should be visible as columns
+	FieldNames []string // Field names that should be visible as columns (empty = no change)
 }
 
-// ---------- List Views ----------
+// ---------- List Views (GraphQL — reliable for reads) ----------
 
-// ListViews returns all views on a project.
+// ListViews returns all views on a project via the GraphQL API.
 func ListViews(gql *ghgql.Client, projectID string) ([]ViewDef, error) {
 	query := `query($projectId: ID!, $cursor: String) {
 		node(id: $projectId) {
@@ -96,153 +96,185 @@ func ListViews(gql *ghgql.Client, projectID string) ([]ViewDef, error) {
 	return views, nil
 }
 
-// ---------- Create View ----------
+// ---------- REST API Types ----------
 
-// CreateView creates a new TABLE view on a project and returns its definition.
-func CreateView(gql *ghgql.Client, projectID, name string) (*ViewDef, error) {
-	// Step 1: Create the view (API doesn't accept name at creation time)
-	mutation := `mutation($projectId: ID!) {
-		createProjectV2View(input: {projectId: $projectId, layout: TABLE}) {
-			projectV2View {
-				id name number layout
-			}
-		}
-	}`
-
-	var createResult struct {
-		CreateProjectV2View struct {
-			ProjectV2View struct {
-				ID     string `json:"id"`
-				Name   string `json:"name"`
-				Number int    `json:"number"`
-				Layout string `json:"layout"`
-			} `json:"projectV2View"`
-		} `json:"createProjectV2View"`
-	}
-
-	err := gql.Do(ghgql.Request{
-		Query:     mutation,
-		Variables: map[string]any{"projectId": projectID},
-	}, &createResult)
-	if err != nil {
-		return nil, fmt.Errorf("creating view: %w", err)
-	}
-
-	view := createResult.CreateProjectV2View.ProjectV2View
-
-	// Step 2: Rename the view
-	renameMutation := `mutation($projectId: ID!, $viewId: ID!, $name: String!) {
-		updateProjectV2View(input: {projectId: $projectId, viewId: $viewId, name: $name}) {
-			projectV2View {
-				id name number layout
-			}
-		}
-	}`
-
-	var renameResult json.RawMessage
-	err = gql.Do(ghgql.Request{
-		Query:     renameMutation,
-		Variables: map[string]any{"projectId": projectID, "viewId": view.ID, "name": name},
-	}, &renameResult)
-	if err != nil {
-		log.Printf("Warning: created view but could not rename to %q: %v", name, err)
-	}
-
-	return &ViewDef{
-		ID:     view.ID,
-		Name:   name,
-		Number: view.Number,
-		Layout: view.Layout,
-	}, nil
+// restView is the JSON shape returned by the GitHub REST API for project views.
+type restView struct {
+	ID     int    `json:"id"`
+	NodeID string `json:"node_id"`
+	Name   string `json:"name"`
+	Number int    `json:"number"`
+	Layout string `json:"layout"`
 }
 
-// ---------- Set View Visible Fields ----------
+// restField is the JSON shape returned by the REST API for project fields.
+type restField struct {
+	ID       int    `json:"id"`
+	NodeID   string `json:"node_id"`
+	Name     string `json:"name"`
+	DataType string `json:"data_type"`
+}
 
-// SetViewVisibleFields sets which fields are visible as columns on a view.
-// fieldIDs should be the project field node IDs to display.
-func SetViewVisibleFields(gql *ghgql.Client, projectID, viewID string, fieldIDs []string) error {
-	mutation := `mutation($projectId: ID!, $viewId: ID!, $fields: [ID!]!) {
-		updateProjectV2View(input: {projectId: $projectId, viewId: $viewId, fields: $fields}) {
-			projectV2View {
-				id name
-			}
-		}
-	}`
+// ---------- REST View Operations ----------
 
-	var result json.RawMessage
-	return gql.Do(ghgql.Request{
-		Query: mutation,
-		Variables: map[string]any{
-			"projectId": projectID,
-			"viewId":    viewID,
-			"fields":    fieldIDs,
-		},
-	}, &result)
+// ownerTypeFromURL determines "users" or "orgs" from a project board URL.
+// e.g., "https://github.com/users/alice/projects/5" → "users"
+//
+//	"https://github.com/orgs/MyOrg/projects/42"  → "orgs"
+func ownerTypeFromURL(url string) string {
+	if strings.Contains(url, "/users/") {
+		return "users"
+	}
+	return "orgs"
+}
+
+// listFieldsREST lists project fields via the REST API.
+// Returns fields with integer IDs needed for visible_fields on views.
+func listFieldsREST(gql *ghgql.Client, ownerType, owner string, projectNum int) ([]restField, error) {
+	path := fmt.Sprintf("/%s/%s/projectsV2/%d/fields?per_page=100", ownerType, owner, projectNum)
+	var fields []restField
+	err := gql.DoREST("GET", path, nil, &fields)
+	return fields, err
+}
+
+// createViewREST creates a new table view via the REST API.
+// The REST API for project views only supports POST (create). There are no
+// GET (list) or PATCH (update) endpoints — those return 404.
+// visible_fields must be set at creation time as an array of integer field IDs.
+func createViewREST(gql *ghgql.Client, ownerType, owner string, projectNum int, name string, fieldIntIDs []int) (*restView, error) {
+	path := fmt.Sprintf("/%s/%s/projectsV2/%d/views", ownerType, owner, projectNum)
+	body := map[string]any{
+		"name":   name,
+		"layout": "table",
+	}
+	if len(fieldIntIDs) > 0 {
+		body["visible_fields"] = fieldIntIDs
+	}
+	var view restView
+	err := gql.DoREST("POST", path, body, &view)
+	if err != nil {
+		return nil, err
+	}
+	return &view, nil
 }
 
 // ---------- Ensure Views ----------
 
 // EnsureViews creates any missing views and sets visible columns on each.
-// destFields provides the field name → ID mapping for resolving column visibility.
-// If destFields is nil, views are created but columns are not configured.
-func EnsureViews(gql *ghgql.Client, projectID string, desired []ViewConfig, destFields ...FieldMap) {
-	existing, err := ListViews(gql, projectID)
-	if err != nil {
-		log.Printf("Warning: could not list project views: %v", err)
+//
+// Listing uses GraphQL (reliable for reads). Creating uses the REST API,
+// which is the only API that supports view creation — GraphQL has no mutation
+// for views. Note: The REST views API only has a POST (create) endpoint;
+// there are no GET (list) or PATCH (update) endpoints.
+// visible_fields are set at view creation time in the POST body.
+// For views that already exist, columns cannot be updated via API.
+func EnsureViews(gql *ghgql.Client, owner string, project *Info, desired []ViewConfig) {
+	if len(desired) == 0 {
 		return
 	}
 
-	// Resolve the optional FieldMap
-	var fields FieldMap
-	if len(destFields) > 0 && destFields[0] != nil {
-		fields = destFields[0]
+	ownerType := ownerTypeFromURL(project.URL)
+
+	// Always list views via GraphQL — the REST API has no list endpoint.
+	gqlViews, err := ListViews(gql, project.ID)
+	if err != nil {
+		log.Printf("Warning: could not list project views via GraphQL: %v", err)
+		return
 	}
 
 	// Index existing views by name
-	viewsByName := make(map[string]ViewDef, len(existing))
-	for _, v := range existing {
-		viewsByName[v.Name] = v
+	type viewInfo struct {
+		NodeID string
+		Name   string
+		Number int
+	}
+	viewsByName := make(map[string]viewInfo, len(gqlViews))
+	for _, v := range gqlViews {
+		viewsByName[v.Name] = viewInfo{NodeID: v.ID, Name: v.Name, Number: v.Number}
 	}
 
+	// Collect views that need manual creation (when REST create fails)
+	var manualViews []ViewConfig
+	restCreateWorks := true
+
+	// Lazily populated: maps field name → REST integer ID for visible_fields.
+	var restFieldsByName map[string]int
+
 	for _, want := range desired {
-		view, exists := viewsByName[want.Name]
-		if exists {
-			log.Printf("  ✓ View %q already exists", want.Name)
-		} else {
-			log.Printf("  Creating view %q...", want.Name)
-			created, err := CreateView(gql, projectID, want.Name)
-			if err != nil {
-				log.Printf("  ✗ Could not create view %q: %v", want.Name, err)
-				continue
-			}
-			view = *created
-			log.Printf("  ✓ Created view %q", want.Name)
+		if _, exists := viewsByName[want.Name]; exists {
+			log.Printf("  View %q already exists", want.Name)
+			continue
 		}
 
-		// Set visible fields/columns
-		if len(want.FieldNames) > 0 && fields != nil {
-			fieldIDs := resolveFieldIDs(want.FieldNames, fields)
-			if len(fieldIDs) > 0 {
-				err := SetViewVisibleFields(gql, projectID, view.ID, fieldIDs)
-				if err != nil {
-					log.Printf("    Warning: could not set visible columns on %q: %v", want.Name, err)
-					log.Printf("    You may need to manually add these columns: %v", want.FieldNames)
+		if !restCreateWorks {
+			manualViews = append(manualViews, want)
+			continue
+		}
+
+		// Resolve field integer IDs for visible_fields (lazy — fetched once)
+		var fieldIDs []int
+		if len(want.FieldNames) > 0 {
+			if restFieldsByName == nil {
+				rfList, rfErr := listFieldsREST(gql, ownerType, owner, project.Number)
+				if rfErr != nil {
+					log.Printf("    Warning: could not list fields via REST for visible_fields: %v", rfErr)
 				} else {
-					log.Printf("    Set %d visible columns on %q", len(fieldIDs), want.Name)
+					restFieldsByName = make(map[string]int, len(rfList))
+					for _, rf := range rfList {
+						restFieldsByName[rf.Name] = rf.ID
+					}
 				}
-			} else {
-				log.Printf("    Warning: none of the requested fields %v were found on the board", want.FieldNames)
+			}
+			if restFieldsByName != nil {
+				fieldIDs = resolveFieldIntIDs(want.FieldNames, restFieldsByName)
 			}
 		}
+
+		log.Printf("  Creating view %q via REST API...", want.Name)
+		created, createErr := createViewREST(gql, ownerType, owner, project.Number, want.Name, fieldIDs)
+		if createErr != nil {
+			log.Printf("  REST create failed for %q: %v", want.Name, createErr)
+			restCreateWorks = false
+			manualViews = append(manualViews, want)
+			continue
+		}
+		log.Printf("  Created view %q (number: %d)", want.Name, created.Number)
+		if len(fieldIDs) > 0 {
+			log.Printf("    Set %d visible column(s): %v", len(fieldIDs), want.FieldNames)
+		}
+	}
+
+	// Print manual-creation summary if REST failed
+	if len(manualViews) > 0 {
+		log.Println()
+		log.Printf("╔══════════════════════════════════════════════════════════════════╗")
+		log.Printf("║  MANUAL ACTION REQUIRED: %d view(s) could not be created        ║", len(manualViews))
+		log.Printf("╟──────────────────────────────────────────────────────────────────╢")
+		log.Printf("║  The REST API returned an error for this org, and GitHub's      ║")
+		log.Printf("║  GraphQL API has no mutation for creating project views.         ║")
+		log.Printf("║                                                                  ║")
+		log.Printf("║  Please create these views manually in the board UI:             ║")
+		log.Printf("║  %s", project.URL)
+		log.Printf("║                                                                  ║")
+		for i, v := range manualViews {
+			log.Printf("║  %2d. %s", i+1, v.Name)
+			if len(v.FieldNames) > 0 {
+				log.Printf("║      columns: %s", strings.Join(v.FieldNames, ", "))
+			}
+		}
+		log.Printf("║                                                                  ║")
+		log.Printf("║  Once created, re-run to verify they are detected.               ║")
+		log.Printf("╚══════════════════════════════════════════════════════════════════╝")
+		log.Println()
 	}
 }
 
-// resolveFieldIDs maps field names to their project field IDs.
-func resolveFieldIDs(names []string, fields FieldMap) []string {
-	var ids []string
+// resolveFieldIntIDs maps field names to REST integer field IDs.
+func resolveFieldIntIDs(names []string, fieldsByName map[string]int) []int {
+	var ids []int
 	for _, name := range names {
-		if fd, ok := fields[name]; ok {
-			ids = append(ids, fd.ID)
+		if id, ok := fieldsByName[name]; ok {
+			ids = append(ids, id)
 		} else {
 			log.Printf("    Field %q not found on board, skipping column", name)
 		}

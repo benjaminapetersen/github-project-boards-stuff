@@ -19,7 +19,7 @@ data:
 
   # --- Issues / org-items phase ---
   ISSUES_REPO: "kubernetes/kubernetes"
-  ISSUES_SIG_LABELS: ""  # e.g., "sig/auth"
+  GITHUB_KUBERNETES_ISSUES_SIG_LABELS: ""  # e.g., "sig/auth"
   ISSUES_SEARCH_QUALIFIER: "involves"
   GITHUB_ADDITIONAL_ORGS: ""  # e.g., "kubernetes-sigs"
   GITHUB_SEARCH_SINCE: "1m"  # 1 month look-back for additional orgs
@@ -34,4 +34,6 @@ data:
   GITHUB_DEST_BOARD_NAME: ""       # REQUIRED for --output=board — board title
   GITHUB_DEST_BOARD_PRIVACY: "private"  # "private" (default) or "public"
   GITHUB_LINK_REPOS: ""
-  GITHUB_DEST_BOARD_ADDITIONAL_VIEWS: ""
+  GITHUB_DEST_BOARD_ADDITIONAL_VIEWS: ""  # multiline: "ViewName=Field1,Field2\nViewName2"
+  GITHUB_DEST_BOARD_CUSTOM_FIELDS: ""  # e.g., "Stream:Upstream|Downstream,Notes"
+  GITHUB_AUTO_CUSTOM_FIELD_TO_REPO: ""  # e.g., "Stream:Upstream=kubernetes/*\nStream:Downstream=Azure/*"

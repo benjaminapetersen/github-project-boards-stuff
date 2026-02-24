@@ -115,7 +115,7 @@ func findUserProject(gql *ghgql.Client, owner, title string) (*Info, error) {
 	query := `query($owner: String!, $cursor: String) {
 		user(login: $owner) {
 			projectsV2(first: 100, after: $cursor) {
-				nodes { id number title url }
+				nodes { id number title url closed }
 				pageInfo { hasNextPage endCursor }
 			}
 		}
@@ -136,6 +136,7 @@ func findUserProject(gql *ghgql.Client, owner, title string) (*Info, error) {
 						Number int    `json:"number"`
 						Title  string `json:"title"`
 						URL    string `json:"url"`
+						Closed bool   `json:"closed"`
 					} `json:"nodes"`
 					PageInfo struct {
 						HasNextPage bool   `json:"hasNextPage"`
@@ -151,7 +152,7 @@ func findUserProject(gql *ghgql.Client, owner, title string) (*Info, error) {
 		}
 
 		for _, p := range result.User.ProjectsV2.Nodes {
-			if p.Title == title {
+			if p.Title == title && !p.Closed {
 				return &Info{ID: p.ID, Number: p.Number, Title: p.Title, URL: p.URL}, nil
 			}
 		}
@@ -169,7 +170,7 @@ func findOrgProject(gql *ghgql.Client, owner, title string) (*Info, error) {
 	query := `query($owner: String!, $cursor: String) {
 		organization(login: $owner) {
 			projectsV2(first: 100, after: $cursor) {
-				nodes { id number title url }
+				nodes { id number title url closed }
 				pageInfo { hasNextPage endCursor }
 			}
 		}
@@ -190,6 +191,7 @@ func findOrgProject(gql *ghgql.Client, owner, title string) (*Info, error) {
 						Number int    `json:"number"`
 						Title  string `json:"title"`
 						URL    string `json:"url"`
+						Closed bool   `json:"closed"`
 					} `json:"nodes"`
 					PageInfo struct {
 						HasNextPage bool   `json:"hasNextPage"`
@@ -205,7 +207,7 @@ func findOrgProject(gql *ghgql.Client, owner, title string) (*Info, error) {
 		}
 
 		for _, p := range result.Organization.ProjectsV2.Nodes {
-			if p.Title == title {
+			if p.Title == title && !p.Closed {
 				return &Info{ID: p.ID, Number: p.Number, Title: p.Title, URL: p.URL}, nil
 			}
 		}
@@ -258,7 +260,7 @@ func CreateProject(gql *ghgql.Client, boardOwner, title string) (*Info, error) {
 }
 
 func resolveOwnerNodeID(gql *ghgql.Client, login string) (string, error) {
-	// Try user
+	// Try GraphQL user query
 	query := `query($login: String!) { user(login: $login) { id } }`
 	var userResult struct {
 		User struct {
@@ -270,7 +272,7 @@ func resolveOwnerNodeID(gql *ghgql.Client, login string) (string, error) {
 		return userResult.User.ID, nil
 	}
 
-	// Try org
+	// Try GraphQL org query
 	query = `query($login: String!) { organization(login: $login) { id } }`
 	var orgResult struct {
 		Organization struct {
@@ -282,7 +284,27 @@ func resolveOwnerNodeID(gql *ghgql.Client, login string) (string, error) {
 		return orgResult.Organization.ID, nil
 	}
 
-	return "", fmt.Errorf("could not resolve node ID for %q", login)
+	// Fallback: REST API for orgs (works when GraphQL org query lacks permissions)
+	var restOrg struct {
+		NodeID string `json:"node_id"`
+	}
+	restErr := gql.DoREST("GET", fmt.Sprintf("/orgs/%s", login), nil, &restOrg)
+	if restErr == nil && restOrg.NodeID != "" {
+		log.Printf("  Resolved %q via REST API (node_id: %s)", login, restOrg.NodeID)
+		return restOrg.NodeID, nil
+	}
+
+	// Fallback: REST API for users
+	var restUser struct {
+		NodeID string `json:"node_id"`
+	}
+	restErr = gql.DoREST("GET", fmt.Sprintf("/users/%s", login), nil, &restUser)
+	if restErr == nil && restUser.NodeID != "" {
+		log.Printf("  Resolved %q via REST API (node_id: %s)", login, restUser.NodeID)
+		return restUser.NodeID, nil
+	}
+
+	return "", fmt.Errorf("could not resolve node ID for %q (graphql: %v, rest: %v)", login, err, restErr)
 }
 
 // ---------- Add Items ----------

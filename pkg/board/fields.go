@@ -30,6 +30,7 @@ type FieldMap map[string]FieldDef
 type FieldValue struct {
 	SingleSelectOptionID string
 	Text                 string
+	Date                 string // YYYY-MM-DD format
 }
 
 // ProjectWithFields holds a project's info along with its field definitions.
@@ -265,6 +266,8 @@ func UpdateItemField(gql *ghgql.Client, projectID, itemID, fieldID string, value
 	var valueMap map[string]any
 	if value.SingleSelectOptionID != "" {
 		valueMap = map[string]any{"singleSelectOptionId": value.SingleSelectOptionID}
+	} else if value.Date != "" {
+		valueMap = map[string]any{"date": value.Date}
 	} else if value.Text != "" {
 		valueMap = map[string]any{"text": value.Text}
 	} else {
@@ -501,14 +504,17 @@ func SetItemFields(gql *ghgql.Client, projectID, itemID string, fieldValues map[
 		}
 
 		var fv FieldValue
-		if destField.Type == "SINGLE_SELECT" {
+		switch destField.Type {
+		case "SINGLE_SELECT":
 			optID, found := ResolveOptionID(destField, desiredValue)
 			if !found {
 				log.Printf("    Option %q not found for field %q, skipping", desiredValue, fieldName)
 				continue
 			}
 			fv.SingleSelectOptionID = optID
-		} else {
+		case "DATE":
+			fv.Date = desiredValue
+		default:
 			fv.Text = desiredValue
 		}
 
