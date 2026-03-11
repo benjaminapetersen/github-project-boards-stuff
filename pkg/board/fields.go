@@ -19,8 +19,10 @@ type FieldDef struct {
 
 // FieldOption is a single-select option within a field.
 type FieldOption struct {
-	ID   string
-	Name string
+	ID          string
+	Name        string
+	Color       string // e.g. "GRAY", "BLUE", "GREEN", etc.
+	Description string
 }
 
 // FieldMap maps field names to their definitions (including option IDs).
@@ -52,7 +54,7 @@ func FindProjectByNumber(gql *ghgql.Client, org string, number int) (*ProjectWit
 					nodes {
 						... on ProjectV2SingleSelectField {
 							id name
-							options { id name }
+							options { id name color description }
 						}
 						... on ProjectV2FieldCommon {
 							id name dataType
@@ -115,7 +117,7 @@ func FindUserProjectByNumber(gql *ghgql.Client, user string, number int) (*Proje
 					nodes {
 						... on ProjectV2SingleSelectField {
 							id name
-							options { id name }
+							options { id name color description }
 						}
 						... on ProjectV2FieldCommon {
 							id name dataType
@@ -173,8 +175,10 @@ type projectFieldNode struct {
 	Name     string `json:"name"`
 	DataType string `json:"dataType,omitempty"`
 	Options  []struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
+		ID          string `json:"id"`
+		Name        string `json:"name"`
+		Color       string `json:"color"`
+		Description string `json:"description"`
 	} `json:"options,omitempty"`
 }
 
@@ -192,7 +196,7 @@ func parseFieldNodes(nodes []projectFieldNode) FieldMap {
 		if len(n.Options) > 0 {
 			def.Type = "SINGLE_SELECT"
 			for _, opt := range n.Options {
-				def.Options = append(def.Options, FieldOption{ID: opt.ID, Name: opt.Name})
+				def.Options = append(def.Options, FieldOption{ID: opt.ID, Name: opt.Name, Color: opt.Color, Description: opt.Description})
 			}
 		}
 		fields[n.Name] = def
@@ -211,7 +215,7 @@ func GetProjectFields(gql *ghgql.Client, projectID string) (FieldMap, error) {
 					nodes {
 						... on ProjectV2SingleSelectField {
 							id name
-							options { id name }
+							options { id name color description }
 						}
 						... on ProjectV2FieldCommon {
 							id name dataType
@@ -297,6 +301,29 @@ func UpdateItemField(gql *ghgql.Client, projectID, itemID, fieldID string, value
 	}, &result)
 }
 
+// ClearItemField clears (removes) a field value from a project item.
+func ClearItemField(gql *ghgql.Client, projectID, itemID, fieldID string) error {
+	mutation := `mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!) {
+		clearProjectV2ItemFieldValue(input: {
+			projectId: $projectId
+			itemId: $itemId
+			fieldId: $fieldId
+		}) {
+			projectV2Item { id }
+		}
+	}`
+
+	var result json.RawMessage
+	return gql.Do(ghgql.Request{
+		Query: mutation,
+		Variables: map[string]any{
+			"projectId": projectID,
+			"itemId":    itemID,
+			"fieldId":   fieldID,
+		},
+	}, &result)
+}
+
 // ---------- Add Item and Return Item ID ----------
 
 // AddItem adds a content item to a project and returns the project item ID.
@@ -346,7 +373,7 @@ func FetchProjectItems(gql *ghgql.Client, projectID string) ([]ProjectItemWithFi
 				items(first: 100, after: $cursor) {
 					nodes {
 						id
-						fieldValues(first: 20) {
+						fieldValues(first: 50) {
 							nodes {
 								... on ProjectV2ItemFieldSingleSelectValue {
 									name
@@ -485,6 +512,81 @@ func ResolveOptionID(field FieldDef, optionName string) (string, bool) {
 	return "", false
 }
 
+// EnsureOption adds a single-select option to a field if it doesn't already
+// exist. Returns the updated FieldDef with the new option included.
+func EnsureOption(gql *ghgql.Client, field FieldDef, optionName string) (FieldDef, error) {
+	if _, found := ResolveOptionID(field, optionName); found {
+		return field, nil
+	}
+
+	colors := []string{"GRAY", "BLUE", "GREEN", "YELLOW", "ORANGE", "RED", "PINK", "PURPLE"}
+	var opts []map[string]any
+	for _, existing := range field.Options {
+		color := existing.Color
+		if color == "" {
+			color = "GRAY"
+		}
+		opts = append(opts, map[string]any{
+			"name":        existing.Name,
+			"color":       color,
+			"description": existing.Description,
+		})
+	}
+	opts = append(opts, map[string]any{
+		"name":        optionName,
+		"color":       colors[len(field.Options)%len(colors)],
+		"description": "",
+	})
+
+	mutation := `mutation($fieldId: ID!, $opts: [ProjectV2SingleSelectFieldOptionInput!]!) {
+		updateProjectV2Field(input: {
+			fieldId: $fieldId
+			singleSelectOptions: $opts
+		}) {
+			projectV2Field {
+				... on ProjectV2SingleSelectField {
+					id name
+					options { id name color description }
+				}
+			}
+		}
+	}`
+
+	var result struct {
+		UpdateProjectV2Field struct {
+			ProjectV2Field struct {
+				ID      string `json:"id"`
+				Name    string `json:"name"`
+				Options []struct {
+					ID          string `json:"id"`
+					Name        string `json:"name"`
+					Color       string `json:"color"`
+					Description string `json:"description"`
+				} `json:"options"`
+			} `json:"projectV2Field"`
+		} `json:"updateProjectV2Field"`
+	}
+
+	err := gql.Do(ghgql.Request{
+		Query:     mutation,
+		Variables: map[string]any{"fieldId": field.ID, "opts": opts},
+	}, &result)
+	if err != nil {
+		return field, fmt.Errorf("failed to add option %q to field %q: %w", optionName, field.Name, err)
+	}
+
+	updated := FieldDef{
+		ID:   field.ID,
+		Name: field.Name,
+		Type: "SINGLE_SELECT",
+	}
+	for _, opt := range result.UpdateProjectV2Field.ProjectV2Field.Options {
+		updated.Options = append(updated.Options, FieldOption{ID: opt.ID, Name: opt.Name, Color: opt.Color, Description: opt.Description})
+	}
+	log.Printf("  Added option %q to field %q (%d options now)", optionName, field.Name, len(updated.Options))
+	return updated, nil
+}
+
 // ---------- Set Item Fields ----------
 
 // SetItemFields sets multiple field values on a project item.
@@ -538,6 +640,11 @@ func CreateTextField(gql *ghgql.Client, projectID, name string) (*FieldDef, erro
 	return createField(gql, projectID, name, "TEXT", nil)
 }
 
+// CreateDateField creates a date custom field on a project.
+func CreateDateField(gql *ghgql.Client, projectID, name string) (*FieldDef, error) {
+	return createField(gql, projectID, name, "DATE", nil)
+}
+
 // CreateSingleSelectField creates a single-select custom field with the given options.
 func CreateSingleSelectField(gql *ghgql.Client, projectID, name string, options []string) (*FieldDef, error) {
 	return createField(gql, projectID, name, "SINGLE_SELECT", options)
@@ -552,7 +659,7 @@ func createField(gql *ghgql.Client, projectID, name, dataType string, options []
 				}
 				... on ProjectV2SingleSelectField {
 					id name
-					options { id name }
+					options { id name color description }
 				}
 			}
 		}
@@ -584,8 +691,10 @@ func createField(gql *ghgql.Client, projectID, name, dataType string, options []
 				Name     string `json:"name"`
 				DataType string `json:"dataType,omitempty"`
 				Options  []struct {
-					ID   string `json:"id"`
-					Name string `json:"name"`
+					ID          string `json:"id"`
+					Name        string `json:"name"`
+					Color       string `json:"color"`
+					Description string `json:"description"`
 				} `json:"options,omitempty"`
 			} `json:"projectV2Field"`
 		} `json:"createProjectV2Field"`
@@ -608,7 +717,7 @@ func createField(gql *ghgql.Client, projectID, name, dataType string, options []
 	if len(f.Options) > 0 {
 		def.Type = "SINGLE_SELECT"
 		for _, opt := range f.Options {
-			def.Options = append(def.Options, FieldOption{ID: opt.ID, Name: opt.Name})
+			def.Options = append(def.Options, FieldOption{ID: opt.ID, Name: opt.Name, Color: opt.Color, Description: opt.Description})
 		}
 	}
 	return def, nil
@@ -641,6 +750,9 @@ func EnsureFields(gql *ghgql.Client, projectID string, needed []FieldSpec, exist
 		case "SINGLE_SELECT":
 			log.Printf("  Creating single-select field %q with %d options...", spec.Name, len(spec.Options))
 			newField, err = CreateSingleSelectField(gql, projectID, spec.Name, spec.Options)
+		case "DATE":
+			log.Printf("  Creating date field %q...", spec.Name)
+			newField, err = CreateDateField(gql, projectID, spec.Name)
 		default:
 			log.Printf("  Creating text field %q...", spec.Name)
 			newField, err = CreateTextField(gql, projectID, spec.Name)

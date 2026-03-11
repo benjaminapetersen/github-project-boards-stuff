@@ -21,4 +21,5 @@ require (
 	github.com/olekukonko/ll v0.1.4-0.20260115111900-9e59c2286df0 // indirect
 	github.com/olekukonko/tablewriter v1.1.3 // indirect
 	golang.org/x/sys v0.29.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

@@ -1,0 +1,43 @@
+# bets.yaml — maps Epic values to Bet categories.
+#
+# Each item on the board has an "Epic" field and a "Bet" field.
+# This file defines which Bet each Epic belongs to.
+# Items whose Epic is not listed here are left unchanged.
+#
+# Usage:
+#   source .env/sig-auth-search.azure.env
+#   go run ./cmd/assign-bets --config cmd/assign-bets/bets.yaml --dry-run
+#   go run ./cmd/assign-bets --config cmd/assign-bets/bets.yaml
+
+# fieldName is the single-select field to set on the board.
+fieldName: Bet
+
+# categories maps each Bet value to the list of Epics that belong to it.
+categories:
+  Top Bets:
+    # Exact names as they appear on the board's Epic field
+    - AKS Azure RBAC++
+    - AKS Identity Bindings
+    - AKS Identity Binding Image Pulls
+    - AKS Image Pulls
+    - AKS External IDP
+    - Auth to Webhooks
+    - Constrained Impersonation
+    - SS CSI Driver
+    - SS Controller
+    - Certs
+    - Certs for Kube Services
+    - SVM
+    - Manifest Based Admission
+    - External Signing of SA Tokens
+    - DRA
+    - .kuberc
+    - AI
+    - Conditional Auth
+    - Influence & MSFT Brand
+    - Kube Security
+    - Kube Image Pulls
+  Tough Cuts:
+    - KMS
+    - Dalec
+    - ARO

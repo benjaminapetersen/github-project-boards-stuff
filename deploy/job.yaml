@@ -1,0 +1,52 @@
+# One-off Job: runs kube-board sync once.
+# Use this for manual / testing runs instead of the CronJob.
+#
+#   kubectl apply -f deploy/job.yaml
+#   kubectl -n kube-board logs -f job/kube-board-run
+#   kubectl -n kube-board delete job kube-board-run   # clean up
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kube-board-run
+  namespace: kube-board
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 1800  # 30-minute timeout
+  template:
+    metadata:
+      labels:
+        app: kube-board
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: kube-board
+          image: kube-board:latest
+          imagePullPolicy: IfNotPresent
+          args:
+            - sync
+            - --use-cache=false
+            - --output=board
+            - --sync
+          envFrom:
+            - configMapRef:
+                name: kube-board-config
+          env:
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: kube-board-token
+                  key: GITHUB_TOKEN
+          volumeMounts:
+            - name: kube-board-output
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+      volumes:
+        - name: kube-board-output
+          persistentVolumeClaim:
+            claimName: kube-board-output-pvc

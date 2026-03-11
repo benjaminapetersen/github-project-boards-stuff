@@ -1,0 +1,40 @@
+# ── kube-board persistent storage ──────────────────────────────────────────────
+# Backs the /data mount in kube-board Job/CronJob pods so that _output/ and
+# .cache/ survive across runs and are visible on the host at:
+#   github-project-boards-stuff/_output/
+#
+# Applied by: scripts/2.2.local.kube-board-runner.sh (kind-local-runner)
+# ──────────────────────────────────────────────────────────────────────────────
+
+# ── PersistentVolume ──────────────────────────────────────────────────────────
+# Backed by kind extraMount: host dir → /mnt/host/kube-board on the node.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: kube-board-output-pv
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: manual
+  hostPath:
+    path: /mnt/host/kube-board
+    type: DirectoryOrCreate
+
+---
+# ── PersistentVolumeClaim ─────────────────────────────────────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kube-board-output-pvc
+  namespace: kube-board
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: manual
+  resources:
+    requests:
+      storage: 1Gi
+  volumeName: kube-board-output-pv

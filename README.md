@@ -25,7 +25,7 @@ view automatically and keeps it in sync.
 │   ├── board/               Shared Projects V2 CRUD
 │   ├── cache/               Generic JSON file caching
 │   └── ratelimit/           Rate limit checking & display
-├── deploy/                  Kubernetes CronJob manifests
+├── deploy/                  Kubernetes Job/CronJob manifests
 │   └── chart/kube-board/    Helm chart (optional)
 ├── .env/                    Environment config examples
 ├── bin/                     Build output (gitignored)
@@ -431,22 +431,20 @@ make image
 
 ## Deploying on Kubernetes
 
-The `deploy/` directory contains manifests to run kube-board as a CronJob.
-The default schedule syncs **4 times per day**: midnight, 6 AM, noon, and 3 PM.
+The `deploy/` directory contains manifests to run kube-board as a one-off Job
+or a recurring CronJob.
 
 These instructions assume a local [Kind](https://kind.sigs.k8s.io/) cluster,
 but the manifests work on any Kubernetes cluster.
 
-### 1. Create a Kind cluster (if needed)
+### 1. Build and load the image
 
 ```bash
-kind create cluster --name kube-board
-```
+# Build the container image and load it into Kind.
+# If you have multiple Kind clusters, pass KIND_CLUSTER:
+make kind-load KIND_CLUSTER=my-cluster
 
-### 2. Build and load the image
-
-```bash
-# Build the container image and load it into Kind
+# If you have only one Kind cluster (or want the default):
 make kind-load
 ```
 
@@ -458,42 +456,66 @@ docker tag kube-board:latest ghcr.io/YOUR_USER/kube-board:latest
 docker push ghcr.io/YOUR_USER/kube-board:latest
 ```
 
-Then update `deploy/cronjob.yaml` to reference the pushed image.
+Then update `deploy/cronjob.yaml` (or `deploy/job.yaml`) to reference the pushed image.
 
-### 3. Configure
+### 2. Configure and apply (from .env file)
 
-Edit `deploy/configmap.yaml` with your team members, milestone, board
-settings, etc.  At minimum set:
-
-- `GITHUB_USERNAMES` — comma-separated GitHub handles
-- `GITHUB_DEST_BOARD_OWNER` — owner of the private board
-- `GITHUB_DEST_BOARD_NAME` — title of the private board
-
-### 4. Create the secret
+The `deploy-env` script reads your `.env/kube-board.env` file, applies the
+ConfigMap on-cluster, and creates the Secret on-cluster — the GitHub PAT never
+touches a local YAML file.
 
 ```bash
-kubectl create namespace kube-board
+# 1. Copy and fill in the env file (if not already done)
+cp .env/kube-board.env.example .env/kube-board.env
+# edit .env/kube-board.env with your token, team members, board settings
 
-kubectl -n kube-board create secret generic kube-board-token \
-  --from-literal=GITHUB_TOKEN=ghp_YOUR_TOKEN_HERE
+# 2. Apply ConfigMap + Secret to the cluster from the .env file
+make deploy-env
+
+# Or with a custom env file path:
+make deploy-env ENV_FILE=.env/my-custom.env
+
+# Or call the script directly:
+./scripts/deploy-env.sh .env/kube-board.env
 ```
 
-### 5. Deploy
+This:
+- Creates the `kube-board` namespace (if needed)
+- Creates/updates `Secret/kube-board-token` on-cluster (idempotent, token stays on-cluster only)
+- Creates/updates `ConfigMap/kube-board-config` on-cluster from all env vars
+
+> **Note:** The `.env/*.env` files are gitignored. The secret is only ever
+> created on-cluster via `kubectl create secret --dry-run=client | kubectl apply`,
+> so your PAT is never written to a local YAML file.
+
+### 3. Deploy
+
+#### One-off Job (recommended for testing)
 
 ```bash
-make deploy
+# Apply the job
+kubectl apply -f deploy/job.yaml
 
-# Or manually:
-kubectl apply -f deploy/
+# Watch the run
+kubectl -n kube-board logs -f job/kube-board-run
+
+# Clean up when done (required before re-running)
+kubectl -n kube-board delete job kube-board-run
 ```
 
-### 6. Verify
+#### CronJob (recurring sync)
+
+```bash
+kubectl apply -f deploy/cronjob.yaml
+```
+
+### 4. Verify
 
 ```bash
 # Check the CronJob
 kubectl -n kube-board get cronjobs
 
-# Trigger a manual run
+# Trigger a manual run from the CronJob
 kubectl -n kube-board create job --from=cronjob/kube-board-sync kube-board-manual
 
 # Watch the job

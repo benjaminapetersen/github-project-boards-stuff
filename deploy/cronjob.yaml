@@ -18,7 +18,7 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 2
-      activeDeadlineSeconds: 600  # 10-minute timeout
+      activeDeadlineSeconds: 1800  # 30-minute timeout
       template:
         metadata:
           labels:
@@ -43,10 +43,17 @@ spec:
                     secretKeyRef:
                       name: kube-board-token
                       key: GITHUB_TOKEN
+              volumeMounts:
+                - name: kube-board-output
+                  mountPath: /data
               resources:
                 requests:
                   cpu: 50m
                   memory: 64Mi
                 limits:
                   cpu: 200m
-                  memory: 128Mi
+                  memory: 256Mi
+          volumes:
+            - name: kube-board-output
+              persistentVolumeClaim:
+                claimName: kube-board-output-pvc

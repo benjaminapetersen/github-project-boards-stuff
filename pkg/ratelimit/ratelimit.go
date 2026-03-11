@@ -169,10 +169,20 @@ func CheckAndWarn(token string) {
 		log.Printf("Warning: could not fetch REST rate limits: %v", err)
 	}
 
-	gql := ghgql.NewClient(token)
-	gqlInfo, err := FetchGraphQL(gql)
-	if err != nil {
-		log.Printf("Warning: could not fetch GraphQL rate limits: %v", err)
+	// If the free REST call already shows GraphQL budget is exhausted, skip
+	// the live GraphQL probe so we don't sit in a retry loop waiting for the
+	// rate-limit window to reset.
+	var gqlInfo *GraphQLInfo
+	if rest != nil && rest.GraphQL.Remaining == 0 {
+		log.Println("BUDGET EXCEEDED: GraphQL budget is 0 (per REST). Skipping live GraphQL probe.")
+		fmt.Printf("\n*** BUDGET EXCEEDED — GraphQL points remaining: 0 / %d ***\n", rest.GraphQL.Limit)
+		fmt.Printf("    Resets at: %s\n\n", rest.GraphQL.ResetAt.Local().Format("2006-01-02 15:04:05 MST"))
+	} else {
+		gql := ghgql.NewClient(token)
+		gqlInfo, err = FetchGraphQL(gql)
+		if err != nil {
+			log.Printf("Warning: could not fetch GraphQL rate limits: %v", err)
+		}
 	}
 
 	PrintStatus(rest, gqlInfo)

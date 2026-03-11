@@ -269,6 +269,39 @@ func EnsureViews(gql *ghgql.Client, owner string, project *Info, desired []ViewC
 	}
 }
 
+// ---------- Update View Filter ----------
+
+// UpdateViewFilter sets the filter string on an existing project view.
+// Uses the GraphQL updateProjectV2View mutation.
+func UpdateViewFilter(gql *ghgql.Client, viewID, filter string) error {
+	mutation := `mutation($viewId: ID!, $filter: String) {
+		updateProjectV2View(input: {viewId: $viewId, filter: $filter}) {
+			projectV2View { id filter }
+		}
+	}`
+
+	var result struct {
+		UpdateProjectV2View struct {
+			ProjectV2View struct {
+				ID     string `json:"id"`
+				Filter string `json:"filter"`
+			} `json:"projectV2View"`
+		} `json:"updateProjectV2View"`
+	}
+
+	err := gql.Do(ghgql.Request{
+		Query: mutation,
+		Variables: map[string]any{
+			"viewId": viewID,
+			"filter": filter,
+		},
+	}, &result)
+	if err != nil {
+		return fmt.Errorf("failed to update view filter: %w", err)
+	}
+	return nil
+}
+
 // resolveFieldIntIDs maps field names to REST integer field IDs.
 func resolveFieldIntIDs(names []string, fieldsByName map[string]int) []int {
 	var ids []int

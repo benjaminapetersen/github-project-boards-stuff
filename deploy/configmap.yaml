@@ -9,6 +9,8 @@ metadata:
 data:
   # --- Team scoping ---
   GITHUB_USERNAMES: ""  # REQUIRED — comma-separated GitHub handles
+  GITHUB_CORE_USERNAMES: ""  # Tiered scoping: involves: queries (broad match)
+  GITHUB_EXTENDED_USERNAMES: ""  # Tiered scoping: author:/assignee: only (narrow match)
 
   # --- Enhancements phase ---
   ENHANCEMENTS_REPO: "kubernetes/enhancements"
@@ -33,7 +35,10 @@ data:
   GITHUB_DEST_BOARD_OWNER: ""      # REQUIRED for --output=board — GitHub user or org
   GITHUB_DEST_BOARD_NAME: ""       # REQUIRED for --output=board — board title
   GITHUB_DEST_BOARD_PRIVACY: "private"  # "private" (default) or "public"
+  GITHUB_DEST_BOARD_AUTHOR_FIELD_NAME: "Item Author"  # Display name for the author field
   GITHUB_LINK_REPOS: ""
   GITHUB_DEST_BOARD_ADDITIONAL_VIEWS: ""  # multiline: "ViewName=Field1,Field2\nViewName2"
+  GITHUB_SKIP_DEFAULT_VIEWS: ""  # "true" to skip hardcoded built-in views
   GITHUB_DEST_BOARD_CUSTOM_FIELDS: ""  # e.g., "Stream:Upstream|Downstream,Notes"
   GITHUB_AUTO_CUSTOM_FIELD_TO_REPO: ""  # e.g., "Stream:Upstream=kubernetes/*\nStream:Downstream=Azure/*"
+  GITHUB_CLOSED_ITEM_WINDOW: ""  # e.g., "30d" — keep closed/merged items updated within this window

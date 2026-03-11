@@ -13,5 +13,9 @@ FROM gcr.io/distroless/static:nonroot
 
 COPY --from=builder /kube-board /kube-board
 
+# /data is the expected mount point for persistent output (_output/, .cache/).
+# When no volume is mounted, files are ephemeral (fine for local dev).
+WORKDIR /data
+
 USER nonroot:nonroot
 ENTRYPOINT ["/kube-board"]
